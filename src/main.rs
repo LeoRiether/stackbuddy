@@ -18,7 +18,11 @@ enum Command {
     },
 
     /// Prints the stack that ends in the current branch
-    Stack,
+    Stack {
+        /// Prints a list of PRs instead of branch names
+        #[arg(short, long)]
+        prs: bool,
+    },
 
     /// Generates a [!Note] block for the PR of the given branch
     Note { branch: Option<String> },
@@ -33,9 +37,16 @@ fn main() -> Result<(), Error> {
             let parent = stackbuddy::parent(branch).unwrap();
             println!("{parent}");
         }
-        Command::Stack => {
+        Command::Stack { prs: true } => {
             for branch in stackbuddy::current_stack() {
-                println!("{branch}");
+                if let Some(pr) = stackbuddy::pr_for_branch(branch)? {
+                    println!("- #{pr}")
+                }
+            }
+        }
+        Command::Stack { prs: false } => {
+            for branch in stackbuddy::current_stack() {
+                println!("{branch}")
             }
         }
         Command::Note { branch } => {

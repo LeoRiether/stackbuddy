@@ -5,6 +5,14 @@ pub fn current_stack() -> Vec<String> {
     StackIter::new().collect()
 }
 
+pub fn stack_from(branch: String) -> Vec<String> {
+    StackIter {
+        current: Some(branch),
+        ..StackIter::default()
+    }
+    .collect()
+}
+
 /// StackIter is an iterator that yields the current branch and then its parent, and so on, until
 /// the main branch is reached.
 #[derive(Debug, Default)]

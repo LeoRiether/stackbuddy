@@ -17,8 +17,11 @@ enum Command {
         branch: Option<String>,
     },
 
-    /// Prints the stack that ends in the current branch
+    /// Prints the stack of branches that ends in the current branch
     Stack {
+        /// The branch to start the stack from. If not given, the current branch is used
+        branch: Option<String>,
+
         /// Prints a list of PRs instead of branch names
         #[arg(short, long)]
         prs: bool,
@@ -37,15 +40,17 @@ fn main() -> Result<(), Error> {
             let parent = stackbuddy::parent(branch).unwrap();
             println!("{parent}");
         }
-        Command::Stack { prs: true } => {
-            for branch in stackbuddy::current_stack() {
+        Command::Stack { branch, prs: true } => {
+            let branch = branch.unwrap_or_else(|| stackbuddy::current_branch().unwrap());
+            for branch in stackbuddy::stack_from(branch) {
                 if let Some(pr) = stackbuddy::pr_for_branch(branch)? {
                     println!("- #{pr}")
                 }
             }
         }
-        Command::Stack { prs: false } => {
-            for branch in stackbuddy::current_stack() {
+        Command::Stack { branch, prs: false } => {
+            let branch = branch.unwrap_or_else(|| stackbuddy::current_branch().unwrap());
+            for branch in stackbuddy::stack_from(branch) {
                 println!("{branch}")
             }
         }

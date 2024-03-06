@@ -58,59 +58,68 @@ pub fn current_branch() -> Result<String, Error> {
     Ok(current)
 }
 
-/// Based on this: https://stackoverflow.com/questions/3161204/how-to-find-the-nearest-parent-of-a-git-branch#comment51253180_17843908
+/// Based on this: https://gist.github.com/joechrysler/6073741
+///
+/// ```
+/// git show-branch -a \
+/// | grep '\*' \
+/// | grep -v `git rev-parse --abbrev-ref HEAD` \
+/// | head -n1 \
+/// | sed 's/.*\[\(.*\)\].*/\1/' \
+/// | sed 's/[\^~].*//'
+/// ```
+///
 /// I could have done some of the processing in Rust, sure, but I don't really want to think about
 /// it :)
 pub fn parent(branch: String) -> Result<String, Error> {
     let mut show_branch = Command::new("git")
-        .arg("show-branch")
+        .args(["show-branch", "-a"])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .context("on git show-branch")?;
 
-    let mut sed = Command::new("sed")
-        .arg("s/].*//")
-        .stdin(show_branch.stdout.take().unwrap())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("on sed s/].*//")?;
-
     let mut grep = Command::new("grep")
         .arg(r"\*")
-        .stdin(sed.stdout.take().unwrap())
+        .stdin(show_branch.stdout.take().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .context(r"on grep \*")?;
 
-    let mut grep2 = Command::new("grep")
+    let mut grep = Command::new("grep")
         .args(["-v", &branch])
         .stdin(grep.stdout.take().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .with_context(|| format!("on grep -v {branch}"))?;
+        .context("on grep -v <branch>")?;
 
     let mut head = Command::new("head")
         .arg("-n1")
-        .stdin(grep2.stdout.take().unwrap())
+        .stdin(grep.stdout.take().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .context("on head -n1")?;
 
-    let sed2 = Command::new("sed")
-        .arg("s/^.*\\[//") // ]
+    let mut sed = Command::new("sed")
+        .arg(r"s/.*\[\(.*\)\].*/\1/")
         .stdin(head.stdout.take().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .output()
-        .context("on sed s/^.*\\[//")? // ]
-        .stdout;
+        .spawn()
+        .context(r"on sed s/.*\[\(.*\)\].*/\1/")?;
 
-    let parent = String::from_utf8(sed2)
+    let sed = Command::new("sed")
+        .arg(r"s/[\^~].*/")
+        .stdin(sed.stdout.take().unwrap())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .context(r"on sed s/[\^~].*/")?;
+
+    let parent = String::from_utf8(sed.stdout)
         .context("failed to parse parent branch")?
         .trim()
         .to_string();

@@ -134,6 +134,9 @@ pub fn pr_for_branch(branch: String) -> Result<Option<String>, Error> {
     if !output.status.success() {
         let stderr =
             String::from_utf8(output.stderr).context("gh pr view stderr was not valid utf-8")?;
+        if stderr.contains("no pull requests found") {
+            return Ok(None);
+        }
         return Err(eyre!("gh pr view failed: {}", stderr));
     }
 

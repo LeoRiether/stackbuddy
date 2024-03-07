@@ -72,7 +72,7 @@ pub fn current_branch() -> Result<String, Error> {
 /// it :)
 pub fn parent(branch: String) -> Result<String, Error> {
     let mut git_log = Command::new("git")
-        .args(["log", "--pretty=format:'%D'", &format!("{branch}^")])
+        .args(["log", "--pretty=format:%D", &format!("{branch}^")])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()

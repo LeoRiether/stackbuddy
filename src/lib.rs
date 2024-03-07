@@ -79,7 +79,7 @@ pub fn parent(branch: String) -> Result<String, Error> {
         .context("on git show-branch")?;
 
     let mut grep = Command::new("grep")
-        .arg("'origin/'")
+        .arg("origin/")
         .stdin(git_log.stdout.take().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -95,7 +95,7 @@ pub fn parent(branch: String) -> Result<String, Error> {
         .context(r"on head -n1")?;
 
     let mut sed = Command::new("sed")
-        .arg("'s@origin/@@'")
+        .arg("s@origin/@@")
         .stdin(head.stdout.take().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -103,12 +103,12 @@ pub fn parent(branch: String) -> Result<String, Error> {
         .context(r"on sed 's@origin/@@'")?;
 
     let sed = Command::new("sed")
-        .arg("'s@,.*")
+        .arg("s@,.*")
         .stdin(sed.stdout.take().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()
-        .context(r"on sed 's@,.*")?;
+        .context(r"on sed 's@,.*'")?;
 
     let parent = String::from_utf8(sed.stdout)
         .context("failed to parse parent branch")?

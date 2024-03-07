@@ -65,7 +65,7 @@ pub fn current_branch() -> Result<String, Error> {
 /// | grep 'origin/' \
 /// | head -n1 \
 /// | sed 's@origin/@@' \
-/// | sed 's@,.*@@
+/// | sed 's@,.*@@'
 /// ```
 ///
 /// I could have done some of the processing in Rust, sure, but I don't really want to think about
@@ -76,7 +76,7 @@ pub fn parent(branch: String) -> Result<String, Error> {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .context("on git show-branch")?;
+        .context("on git log --pretty=format:'%D' <branch>^")?;
 
     let mut grep = Command::new("grep")
         .arg("origin/")
@@ -103,12 +103,12 @@ pub fn parent(branch: String) -> Result<String, Error> {
         .context(r"on sed 's@origin/@@'")?;
 
     let sed = Command::new("sed")
-        .arg("s@,.*")
+        .arg("s@,.*@@")
         .stdin(sed.stdout.take().unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()
-        .context(r"on sed 's@,.*'")?;
+        .context(r"on sed 's@,.*@@'")?;
 
     let parent = String::from_utf8(sed.stdout)
         .context("failed to parse parent branch")?

@@ -22,10 +22,6 @@ enum Command {
     Stack {
         /// The branch to start the stack from. If not given, the current branch is used
         branch: Option<String>,
-
-        /// Prints a list of PRs instead of branch names
-        #[arg(short, long)]
-        prs: bool,
     },
 
     /// Generates a [!Note] block for the PR of the given branch
@@ -34,7 +30,7 @@ enum Command {
         #[arg(value_enum, default_value_t = NoteFormat::default())]
         format: NoteFormat,
 
-        branch: Option<String> 
+        branch: Option<String>,
     },
 }
 
@@ -44,18 +40,10 @@ fn main() -> Result<(), Error> {
     match args.command {
         Command::Parent { branch } => {
             let branch = branch.unwrap_or_else(|| stackbuddy::current_branch().unwrap());
-            let parent = stackbuddy::parent(branch).unwrap();
-            println!("{parent}");
+            let parent = stackbuddy::parent(branch)?;
+            println!("{}", parent.unwrap_or_else(|| "None".to_string()));
         }
-        Command::Stack { branch, prs: true } => {
-            let branch = branch.unwrap_or_else(|| stackbuddy::current_branch().unwrap());
-            for branch in stackbuddy::stack_from(branch) {
-                if let Some(pr) = stackbuddy::pr_for_branch(branch)? {
-                    println!("- #{pr}")
-                }
-            }
-        }
-        Command::Stack { branch, prs: false } => {
+        Command::Stack { branch } => {
             let branch = branch.unwrap_or_else(|| stackbuddy::current_branch().unwrap());
             for branch in stackbuddy::stack_from(branch) {
                 println!("{branch}")

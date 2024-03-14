@@ -1,5 +1,5 @@
 use clap::ValueEnum;
-use eyre::{eyre, Context, Error};
+use eyre::{eyre, Context, Error, OptionExt};
 use std::process::{Command, Stdio};
 
 pub fn current_stack() -> Vec<String> {
@@ -7,28 +7,26 @@ pub fn current_stack() -> Vec<String> {
 }
 
 pub fn stack_from(branch: String) -> Vec<String> {
-    StackIter {
-        current: Some(branch),
-        ..StackIter::default()
-    }
-    .collect()
+    StackIter::from(branch).collect()
 }
 
 /// StackIter is an iterator that yields the current branch and then its parent, and so on, until
 /// the main branch is reached.
 #[derive(Debug, Default)]
 struct StackIter {
-    /// For some weird reason the [`parent`] of the base branch is the branch you're on right now
-    first: String,
+    main: String,
     current: Option<String>,
 }
 
 impl StackIter {
     pub fn new() -> Self {
-        let current = current_branch().expect("failed to get current branch");
+        Self::from(current_branch().expect("failed to get current branch"))
+    }
+
+    pub fn from(branch: String) -> Self {
         Self {
-            first: current.clone(),
-            current: Some(current),
+            main: main_branch().expect("failed to get main branch"),
+            current: Some(branch),
         }
     }
 }
@@ -39,9 +37,9 @@ impl Iterator for StackIter {
     fn next(&mut self) -> Option<Self::Item> {
         let current = self.current.take()?;
         let next = parent(current.clone()).expect("failed to get parent branch");
-        if next != current && next != self.first {
-            self.current = Some(next);
-        }
+        self.current = next
+            .filter(|next| next != &self.main)
+            .filter(|next| next != &current);
         Some(current)
     }
 }
@@ -59,63 +57,58 @@ pub fn current_branch() -> Result<String, Error> {
     Ok(current)
 }
 
-/// Based on this: https://gist.github.com/joechrysler/6073741?permalink_comment_id=3108387#gistcomment-3108387
-///
-/// ```
-/// git log --pretty=format:'%D' HEAD^ \
-/// | grep 'origin/' \
-/// | head -n1 \
-/// | sed 's@origin/@@' \
-/// | sed 's@,.*@@'
-/// ```
-///
-/// I could have done some of the processing in Rust, sure, but I don't really want to think about
-/// it :)
-pub fn parent(branch: String) -> Result<String, Error> {
-    let mut git_log = Command::new("git")
-        .args(["log", "--pretty=format:%D", &format!("{branch}^")])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("on git log --pretty=format:'%D' <branch>^")?;
+pub fn main_branch() -> Result<String, Error> {
+    let branches = Command::new("git")
+        .arg("branch")
+        .output()
+        .context("git branch failed")?
+        .stdout;
+    let branches = String::from_utf8(branches)?;
 
-    let mut grep = Command::new("grep")
-        .arg("origin/")
-        .stdin(git_log.stdout.take().unwrap())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .context(r"on grep 'origin/'")?;
+    let main = branches
+        .lines()
+        .map(|b| b.trim_start_matches("* ").trim())
+        .find(|&b| b == "main" || b == "master");
 
-    let mut head = Command::new("head")
-        .arg("-n1")
-        .stdin(grep.stdout.take().unwrap())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .context(r"on head -n1")?;
+    main.map(str::to_string)
+        .ok_or_eyre("Main branch not found. Is it named something other than `main` or `master`?")
+}
 
-    let mut sed = Command::new("sed")
-        .arg("s@origin/@@")
-        .stdin(head.stdout.take().unwrap())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .context(r"on sed 's@origin/@@'")?;
-
-    let sed = Command::new("sed")
-        .arg("s@,.*@@")
-        .stdin(sed.stdout.take().unwrap())
+pub fn parent(branch: String) -> Result<Option<String>, Error> {
+    let log = Command::new("git")
+        .args(["log", "--oneline", "--graph", "--decorate"])
+        .args(["--simplify-by-decoration", "--first-parent", "-n", "32"])
+        .args(["--skip", "1"])
+        .arg(branch)
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()
-        .context(r"on sed 's@,.*@@'")?;
+        .context(r"git log failed")?;
 
-    let parent = String::from_utf8(sed.stdout)
-        .context("failed to parse parent branch")?
-        .trim()
-        .to_string();
+    let log = String::from_utf8(log.stdout)?;
+
+    let parent = log
+        .lines() // * commit (branch) message
+        .map(|line| line.trim_start_matches('*').trim()) // commit (branch) message
+        .filter_map(|line| line.split_once(' ')) // (branch) message
+        .filter_map(|(_commit, line)| extract_branch(line))
+        .map(str::to_string)
+        .next();
+
     Ok(parent)
+}
+
+fn extract_branch(line: &str) -> Option<&str> {
+    let from = line.find('(')? + 1;
+    let to = line.find(')')?;
+
+    #[allow(clippy::filter_next)]
+    line[from..to]
+        .split(", ")
+        .map(|branch| branch.strip_prefix("HEAD -> ").unwrap_or(branch))
+        .filter(|branch| !branch.starts_with("origin/"))
+        .filter(|branch| !branch.starts_with("tag: "))
+        .next()
 }
 
 pub fn pr_for_branch(branch: String) -> Result<Option<String>, Error> {

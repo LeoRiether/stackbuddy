@@ -194,7 +194,7 @@ fn note_double(prev_pr: Option<String>, next_pr: Option<String>) -> Result<Strin
 
 fn note_list(branch: &str, stack: &[String]) -> Result<String, Error> {
     let mut note = "> [!Note]\n> PRs in the stack:".to_string();
-    for b in stack {
+    for b in stack.iter().rev() {
         if let Some(pr) = pr_for_branch(b.clone())? {
             note.push_str(&format!("\n> - #{pr}"));
             if b == branch {

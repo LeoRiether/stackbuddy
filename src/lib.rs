@@ -193,16 +193,16 @@ fn note_double(prev_pr: Option<String>, next_pr: Option<String>) -> Result<Strin
 }
 
 fn note_list(branch: &str, stack: &[String]) -> Result<String, Error> {
-    let mut note = "> [!Note]\n> PRs in the stack:".to_string();
+    let mut items = Vec::new();
     for b in stack.iter().rev() {
         if let Some(pr) = pr_for_branch(b.clone())? {
-            note.push_str(&format!("\n> - #{pr}"));
+            items.push(format!("- #{pr}"));
             if b == branch {
-                note.push_str(" (this)");
+                items.last_mut().unwrap().push_str(" (this)");
             }
         }
     }
-    Ok(note)
+    Ok(items.join("\n"))
 }
 
 fn note_table(prev_pr: Option<String>, next_pr: Option<String>) -> Result<String, Error> {

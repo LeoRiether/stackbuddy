@@ -1,3 +1,4 @@
+use clap::ValueEnum;
 use eyre::{eyre, Context, Error};
 use std::process::{Command, Stdio};
 
@@ -144,7 +145,20 @@ pub fn pr_for_branch(branch: String) -> Result<Option<String>, Error> {
     Ok(Some(pr).filter(|pr| !pr.is_empty()))
 }
 
-pub fn note_block(branch: String) -> Result<String, Error> {
+#[derive(ValueEnum, Default, Clone)]
+pub enum NoteFormat {
+    /// Displays the previous and next PRs, like a doubly linked list
+    #[default]
+    Double,
+
+    /// Displays the entire stack of PRs in a list
+    List,
+
+    /// Displays the previous and next PRs, formatted in two columns of a table
+    Table,
+}
+
+pub fn note_block(branch: String, format: NoteFormat) -> Result<String, Error> {
     let stack = current_stack();
 
     let branch_index = stack
@@ -164,15 +178,51 @@ pub fn note_block(branch: String) -> Result<String, Error> {
         .transpose()?
         .flatten();
 
+    match format {
+        NoteFormat::Double => note_double(prev_pr, next_pr),
+        NoteFormat::List => note_list(&branch, &stack),
+        NoteFormat::Table => note_table(prev_pr, next_pr),
+    }
+}
+
+fn note_double(prev_pr: Option<String>, next_pr: Option<String>) -> Result<String, Error> {
     let mut note = "> [!Note]".to_string();
     if let Some(prev_pr) = prev_pr {
-        note.push_str(&format!("\n> Previous PR: #{prev_pr}"));
+        note.push_str(&format!("\n> - Previous PR: #{prev_pr}"));
     }
     if let Some(next_pr) = next_pr {
-        note.push_str(&format!("\n> Next PR: #{next_pr}"));
+        note.push_str(&format!("\n> - Next PR: #{next_pr}"));
     }
     if note == "> [!Note]" {
         note.push_str("\n> This is currently the only PR in the stack");
     }
+    Ok(note)
+}
+
+fn note_list(branch: &str, stack: &[String]) -> Result<String, Error> {
+    let mut note = "> [!Note]\n> PRs in the stack:".to_string();
+    for b in stack {
+        if let Some(pr) = pr_for_branch(b.clone())? {
+            note.push_str(&format!("\n> - #{pr}"));
+            if b == branch {
+                note.push_str(" (this)");
+            }
+        }
+    }
+    Ok(note)
+}
+
+fn note_table(prev_pr: Option<String>, next_pr: Option<String>) -> Result<String, Error> {
+    let prev_pr = prev_pr
+        .map(|pr| format!("#{pr}"))
+        .unwrap_or_else(|| "None".to_string());
+    let next_pr = next_pr
+        .map(|pr| format!("#{pr}"))
+        .unwrap_or_else(|| "None".to_string());
+
+    let mut note = String::new();
+    note.push_str("| Previous PR | Next PR |\n");
+    note.push_str("|-------------|---------|\n");
+    note.push_str(&format!("| {prev_pr} | {next_pr} |"));
     Ok(note)
 }

@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use eyre::Error;
+use stackbuddy::NoteFormat;
 
 /// stackbuddy helps you manage your PR stacks
 #[derive(Parser)]
@@ -28,7 +29,13 @@ enum Command {
     },
 
     /// Generates a [!Note] block for the PR of the given branch
-    Note { branch: Option<String> },
+    Note {
+        /// The format to display the note in
+        #[arg(value_enum, default_value_t = NoteFormat::default())]
+        format: NoteFormat,
+
+        branch: Option<String> 
+    },
 }
 
 fn main() -> Result<(), Error> {
@@ -54,9 +61,9 @@ fn main() -> Result<(), Error> {
                 println!("{branch}")
             }
         }
-        Command::Note { branch } => {
+        Command::Note { format, branch } => {
             let branch = branch.unwrap_or_else(|| stackbuddy::current_branch().unwrap());
-            let note = stackbuddy::note_block(branch)?;
+            let note = stackbuddy::note_block(branch, format)?;
             println!("{note}");
         }
     }

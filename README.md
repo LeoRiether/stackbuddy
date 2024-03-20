@@ -8,10 +8,11 @@ stackbuddy helps you manage your PR stacks
 Usage: stackbuddy <COMMAND>
 
 Commands:
-  parent  Prints the parent of the given branch
-  stack   Prints the stack of branches that ends in the current branch
-  note    Generates a [!Note] block for the PR of the given branch
-  help    Print this message or the help of the given subcommand(s)
+  parent        Prints the parent of the given branch
+  stack         Prints the stack of branches that ends in the current branch
+  note          Generates a [!Note] block for the PR of the given branch
+  update-notes  Updates all PRs in a stack, starting from the given branch, with a note. For more information about notes, see stackbuddy note --help
+  help          Print this message or the help of the given subcommand(s)
 ```
 
 ## Installing

@@ -1,6 +1,9 @@
 use clap::ValueEnum;
 use eyre::{eyre, Context, Error, OptionExt};
-use std::process::{Command, Stdio};
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
 
 pub fn current_stack() -> Vec<String> {
     StackIter::new().collect()
@@ -138,7 +141,37 @@ pub fn pr_for_branch(branch: String) -> Result<Option<String>, Error> {
     Ok(Some(pr).filter(|pr| !pr.is_empty()))
 }
 
-#[derive(ValueEnum, Default, Clone)]
+pub fn pr_body(branch: String) -> Result<String, Error> {
+    let output = Command::new("gh")
+        .args(["pr", "view", &branch, "--json", "body", "--jq", ".body"])
+        .output()
+        .context("gh pr view failed")?;
+
+    if !output.status.success() {
+        let stderr =
+            String::from_utf8(output.stderr).context("gh pr view stderr was not valid utf-8")?;
+        return Err(eyre!("gh pr view failed: {}", stderr));
+    }
+
+    let body = String::from_utf8(output.stdout).context("gh pr view stdout was not valid utf-8")?;
+    Ok(body)
+}
+
+pub fn set_pr_body(branch: String, body: String) -> Result<(), Error> {
+    Command::new("gh")
+        .args(["pr", "edit", &branch, "--body-file", "-"])
+        .stdout(Stdio::null())
+        .stdin(Stdio::piped())
+        .spawn()
+        .context("gh pr edit failed")?
+        .stdin
+        .ok_or_else(|| eyre!("gh pr edit stdin was not captured"))?
+        .write_all(body.as_bytes())
+        .context("failed to write to gh pr edit stdin")?;
+    Ok(())
+}
+
+#[derive(ValueEnum, Default, Clone, Copy)]
 pub enum NoteFormat {
     /// Displays the previous and next PRs, like a doubly linked list
     #[default]
@@ -161,7 +194,6 @@ pub fn note_block(branch: String, format: NoteFormat) -> Result<String, Error> {
 
     let prev_pr = stack
         .get(branch_index + 1)
-        .filter(|_| branch_index + 2 < stack.len()) // base branch shouldn't have a PR
         .map(|b| pr_for_branch(b.clone()))
         .transpose()?
         .flatten();
@@ -218,4 +250,34 @@ fn note_table(prev_pr: Option<String>, next_pr: Option<String>) -> Result<String
     note.push_str("|-------------|---------|\n");
     note.push_str(&format!("| {prev_pr} | {next_pr} |"));
     Ok(note)
+}
+
+pub fn update_note(branch: String, note_format: NoteFormat, dry_run: bool) -> Result<(), Error> {
+    let body = pr_body(branch.clone())
+        .with_context(|| format!("failed to get PR body for branch '{branch}'"))?;
+    let note = note_block(branch.clone(), note_format)?;
+    let new_body = replace_note(body, note);
+    if dry_run {
+        println!("New PR body:\n{}", new_body);
+    } else {
+        set_pr_body(branch, new_body)?;
+    }
+    Ok(())
+}
+
+fn replace_note(pr_body: String, note: String) -> String {
+    const OPEN: &str = "<!-- stackbuddy note -->";
+    const CLOSE: &str = "<!-- /stackbuddy note -->";
+
+    let open = pr_body.find(OPEN);
+    let close = pr_body.find(CLOSE);
+
+    match (open, close) {
+        (Some(open), Some(close)) if open < close => {
+            let before = &pr_body[..open];
+            let after = &pr_body[close + CLOSE.len()..];
+            format!("{before}{OPEN}\n{note}\n{CLOSE}\n{after}")
+        }
+        _ => format!("{OPEN}\n{note}\n{CLOSE}\n{pr_body}"),
+    }
 }

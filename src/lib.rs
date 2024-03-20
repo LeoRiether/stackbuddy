@@ -281,3 +281,4 @@ fn replace_note(pr_body: String, note: String) -> String {
         _ => format!("{OPEN}\n{note}\n{CLOSE}\n{pr_body}"),
     }
 }
+

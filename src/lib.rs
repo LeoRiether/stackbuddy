@@ -256,16 +256,16 @@ pub fn update_note(branch: String, note_format: NoteFormat, dry_run: bool) -> Re
     let body = pr_body(branch.clone())
         .with_context(|| format!("failed to get PR body for branch '{branch}'"))?;
     let note = note_block(branch.clone(), note_format)?;
-    let new_body = replace_note(body, note);
+    let new_body = replace_note(&body, &note);
     if dry_run {
         println!("New PR body:\n{}", new_body);
-    } else {
+    } else if new_body != body {
         set_pr_body(branch, new_body)?;
     }
     Ok(())
 }
 
-fn replace_note(pr_body: String, note: String) -> String {
+fn replace_note(pr_body: &str, note: &str) -> String {
     const OPEN: &str = "<!-- stackbuddy note -->";
     const CLOSE: &str = "<!-- /stackbuddy note -->";
 
